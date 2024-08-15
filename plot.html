@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="th-TH">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>อ่านค่า Sensor จาก Pi ผ่าน Web Socket</title>
+
+    <style>
+      @import url("https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Thai+Looped:wght@100;200;300;400;500;600;700&family=Noto+Sans+Thai+Looped:wght@100;200;300;400;500;600;700;800;900&display=swap");
+
+      body {
+        font-family: "IBM Plex Sans Thai Looped", sans-serif;
+        font-size: 16px;
+        line-height: 1.5;
+        color: #333;
+        background-color: #f8f9fa;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container max-w-3xl mx-auto pt-16">
+      <h1 class="font-bold text-2xl">ค่า ... จาก Raspberry Pi 1</h1>
+
+      <canvas id="chart-1" class="w-full h-[300px]"></canvas>
+
+      <div class="mt-8">
+        <!-- WebSocket status -->
+        <div class="flex items-center">
+          <div class="flex items-center" id="client-status">
+            <div class="w-4 h-4 bg-red-500 rounded-full"></div>
+            <span class="ml-2">Disconnected</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+
+    <script>
+      // chart
+      const ctx = document.getElementById("chart-1");
+      const chart = new Chart(
+        ctx,
+        {
+          type: "line",
+          data: {
+            labels: [],
+            datasets: [
+              {
+                label: "Sensor 1",
+                data: [],
+                fill: false,
+                borderColor: "rgb(75, 192, 192)",
+                tension: 0.1,
+              },
+            ],
+          },
+          options: {
+            scales: {
+              y: {
+                beginAtZero: true,
+              },
+            },
+          },
+        },
+        {
+          animationSteps: 5,
+        }
+      );
+    </script>
+
+    <script>
+      const ws = new WebSocket("ws://192.168.72.110:8765");
+
+      const clientStatus = document.getElementById("client-status");
+      let lastestReceivedAt = 0;
+
+      ws.onopen = () => {
+        console.log("Connected to the WebSocket server");
+        clientStatus.innerHTML = `
+          <div class="w-4 h-4 bg-green-500 rounded-full"></div>
+          <span class="ml-2">Connected</span>
+        `;
+      };
+
+      ws.onmessage = (event) => {
+        const message = event.data;
+        const value = parseFloat(message);
+        if (isNaN(value)) {
+          console.error("Invalid sensor value:", message);
+          return;
+        }
+        console.log("Received sensor value:", value);
+
+        // if last message received at less than 5 seconds ago, ignore current message
+        // if (new Date() - lastestReceivedAt < 5000) {
+        //   return;
+        // }
+
+        chart.data.labels.push(new Date().toLocaleTimeString());
+        chart.data.datasets[0].data.push(value);
+        chart.update();
+
+        if (chart.data.labels.length > 20) {
+          chart.data.labels.shift();
+          chart.data.datasets[0].data.shift();
+          chart.update();
+        }
+
+        lastestReceivedAt = new Date();
+      };
+
+      ws.onclose = () => {
+        console.log("Disconnected from the WebSocket server");
+        clientStatus.innerHTML = `
+          <div class="w-4 h-4 bg-red-500 rounded-full"></div>
+          <span class="ml-2">Disconnected</span>
+        `;
+      };
+
+      ws.onerror = (error) => {
+        console.error("WebSocket error:", error);
+      };
+    </script>
+  </body>
+</html>
